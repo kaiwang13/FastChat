@@ -5,18 +5,18 @@ import json
 import os
 import time
 import uuid
-
-import gradio as gr
 import requests
+import gradio as gr
 
 from fastchat.conversation import (default_conversation, conv_templates,
                                    SeparatorStyle)
+
 from fastchat.constants import LOGDIR
 from fastchat.utils import (build_logger, server_error_msg,
     violates_moderation, moderation_msg)
 from fastchat.serve.gradio_patch import Chatbot as grChatbot
 from fastchat.serve.gradio_css import code_highlight_css
-
+from fastchat.serve.trans import detect_language, translate_to_en, translate_from_en
 
 logger = build_logger("gradio_web_server", "gradio_web_server.log")
 
@@ -24,13 +24,21 @@ headers = {"User-Agent": "fastchat Client"}
 
 no_change_btn = gr.Button.update()
 enable_btn = gr.Button.update(interactive=True)
+enable_tb = gr.Textbox.update(interactive=True)
+disable_clear_tb = gr.Textbox.update(value='', interactive=False)
 disable_btn = gr.Button.update(interactive=False)
+
+
+def json_dump(obj, path, mode='a'):
+    with open(path, mode, encoding='utf8') as f:
+        json.dump(obj, f, ensure_ascii=False, sort_keys=True)
+        f.write('\n')
+
 
 priority = {
     "vicuna-13b": "aaaaaaa",
     "koala-13b": "aaaaaab",
 }
-
 
 def get_conv_log_filename():
     t = datetime.datetime.now()
@@ -73,6 +81,7 @@ def load_demo(url_params, request: gr.Request):
             dropdown_update,
             gr.Chatbot.update(visible=True),
             gr.Textbox.update(visible=True),
+            gr.Textbox.update(visible=True),
             gr.Button.update(visible=True),
             gr.Row.update(visible=True),
             gr.Accordion.update(visible=True))
@@ -87,71 +96,76 @@ def load_demo_refresh_model_list(request: gr.Request):
                value=models[0] if len(models) > 0 else ""),
             gr.Chatbot.update(visible=True),
             gr.Textbox.update(visible=True),
+            gr.Textbox.update(visible=True),
             gr.Button.update(visible=True),
             gr.Row.update(visible=True),
             gr.Accordion.update(visible=True))
 
 
-def vote_last_response(state, vote_type, model_selector, request: gr.Request):
-    with open(get_conv_log_filename(), "a") as fout:
-        data = {
-            "tstamp": round(time.time(), 4),
-            "type": vote_type,
-            "model": model_selector,
-            "state": state.dict(),
-            "ip": request.client.host,
-        }
-        fout.write(json.dumps(data) + "\n")
+def vote_last_response(state, vote_type, model_selector, comments, request: gr.Request):
+    data = {
+        "tstamp": round(time.time(), 4),
+        "type": vote_type,
+        "model": model_selector,
+        "comments": comments,
+        "state": state.dict(),
+        "ip": request.client.host,
+    }
+    json_dump(data, get_conv_log_filename(), mode='a')
 
 
-def upvote_last_response(state, model_selector, request: gr.Request):
+def upvote_last_response(state, model_selector, comments, request: gr.Request):
     logger.info(f"upvote. ip: {request.client.host}")
-    vote_last_response(state, "upvote", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    vote_last_response(state, "upvote", model_selector, comments, request)
+    return ("",disable_clear_tb) + (disable_btn,) * 3
 
 
-def downvote_last_response(state, model_selector, request: gr.Request):
+def downvote_last_response(state, model_selector, comments, request: gr.Request):
     logger.info(f"downvote. ip: {request.client.host}")
-    vote_last_response(state, "downvote", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    vote_last_response(state, "downvote", model_selector, comments, request)
+    return ("",disable_clear_tb) + (disable_btn,) * 3
 
 
-def flag_last_response(state, model_selector, request: gr.Request):
+def flag_last_response(state, model_selector, comments, request: gr.Request):
     logger.info(f"flag. ip: {request.client.host}")
-    vote_last_response(state, "flag", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    vote_last_response(state, "flag", model_selector, comments, request)
+    return ("",disable_clear_tb) + (disable_btn,) * 3
 
 
 def regenerate(state, request: gr.Request):
     logger.info(f"regenerate. ip: {request.client.host}")
-    state.messages[-1][-1] = None
+    state.messages[-1][1] = None
     state.skip_next = False
-    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 4
 
 
 def clear_history(request: gr.Request):
     logger.info(f"clear_history. ip: {request.client.host}")
     state = default_conversation.copy()
-    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 4
 
 
 def add_text(state, text, request: gr.Request):
+    language = detect_language(text)
     logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0:
         state.skip_next = True
-        return (state, state.to_gradio_chatbot(), "") + (no_change_btn,) * 5
+        return (state, state.to_gradio_chatbot(), "") + (no_change_btn,) * 4
     if args.moderate:
         flagged = violates_moderation(text)
         if flagged:
             state.skip_next = True
             return (state, state.to_gradio_chatbot(), moderation_msg) + (
-                no_change_btn,) * 5
-
-    text = text[:1536]  # Hard cut-off
-    state.append_message(state.roles[0], text)
-    state.append_message(state.roles[1], None)
+                no_change_btn,) * 4
+    if language != 'en':
+        trans_text = translate_to_en(text, language)
+    else:
+        trans_text = text
+    text = text[:5000]  # Hard cut-off
+    state.append_message(state.roles[0], trans_text, text, language)
+    state.append_message(state.roles[1], None, None, language)
     state.skip_next = False
-    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 4
 
 
 def post_process_code(code):
@@ -172,19 +186,21 @@ def http_bot(state, model_selector, temperature, max_new_tokens, request: gr.Req
 
     if state.skip_next:
         # This generate call is skipped due to invalid inputs
-        yield (state, state.to_gradio_chatbot()) + (no_change_btn,) * 5
+        yield (state, state.to_gradio_chatbot()) + (no_change_btn,) * 4
         return
 
     if len(state.messages) == state.offset + 2:
         # First round of conversation
         if "koala" in model_name: # Hardcode the condition
             template_name = "bair_v1"
+        elif 'medgpt' in model_name:
+            template_name = "medgpt"
         else:
             template_name = "v1"
         new_state = conv_templates[template_name].copy()
         new_state.conv_id = uuid.uuid4().hex
-        new_state.append_message(new_state.roles[0], state.messages[-2][1])
-        new_state.append_message(new_state.roles[1], None)
+        new_state.append_message(new_state.roles[0], state.messages[-2][1], state.messages[-2][2], state.messages[-2][3])
+        new_state.append_message(new_state.roles[1], state.messages[-1][1], state.messages[-1][2], state.messages[-1][3])
         state = new_state
 
     # Query worker address
@@ -196,8 +212,8 @@ def http_bot(state, model_selector, temperature, max_new_tokens, request: gr.Req
 
     # No available worker
     if worker_addr == "":
-        state.messages[-1][-1] = server_error_msg
-        yield (state, state.to_gradio_chatbot(), disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
+        state.messages[-1][1] = server_error_msg
+        yield (state, state.to_gradio_chatbot(), disable_clear_tb, disable_btn, disable_btn, disable_btn, enable_btn)
         return
 
     # Construct prompt
@@ -218,8 +234,8 @@ def http_bot(state, model_selector, temperature, max_new_tokens, request: gr.Req
     }
     logger.info(f"==== request ====\n{pload}")
 
-    state.messages[-1][-1] = "▌"
-    yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
+    state.messages[-1][1] = "▌"
+    yield (state, state.to_gradio_chatbot(), enable_tb) + (disable_btn,) * 4
 
     try:
         # Stream output
@@ -231,61 +247,59 @@ def http_bot(state, model_selector, temperature, max_new_tokens, request: gr.Req
                 if data["error_code"] == 0:
                     output = data["text"][skip_echo_len:].strip()
                     output = post_process_code(output)
-                    state.messages[-1][-1] = output + "▌"
-                    yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
+                    state.messages[-1][1] = output + "▌"
+                    yield (state, state.to_gradio_chatbot(), enable_tb) + (disable_btn,) * 4
                 else:
                     output = data["text"] + f" (error_code: {data['error_code']})"
-                    state.messages[-1][-1] = output
-                    yield (state, state.to_gradio_chatbot()) + (disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
+                    state.messages[-1][1] = output
+                    yield (state, state.to_gradio_chatbot(), enable_tb) + (disable_btn, disable_btn, disable_btn, enable_btn)
                     return
                 time.sleep(0.02)
     except requests.exceptions.RequestException as e:
-        state.messages[-1][-1] = server_error_msg + f" (error_code: 4)"
-        yield (state, state.to_gradio_chatbot()) + (disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
+        state.messages[-1][1] = server_error_msg + f" (error_code: 4)"
+        yield (state, state.to_gradio_chatbot(), enable_tb) + (disable_btn, disable_btn, disable_btn, enable_btn)
         return
 
-    state.messages[-1][-1] = state.messages[-1][-1][:-1]
-    yield (state, state.to_gradio_chatbot()) + (enable_btn,) * 5
+
+    state.messages[-1][1] = state.messages[-1][1][:-1]
+    if state.messages[-1][3] != 'en':
+        state.messages[-1][2] = translate_from_en(state.messages[-1][1], state.messages[-1][3])
+    yield (state, state.to_gradio_chatbot(), enable_tb) + (enable_btn,) * 4
 
     finish_tstamp = time.time()
     logger.info(f"{output}")
 
-    with open(get_conv_log_filename(), "a") as fout:
-        data = {
-            "tstamp": round(finish_tstamp, 4),
-            "type": "chat",
-            "model": model_name,
-            "start": round(start_tstamp, 4),
-            "finish": round(start_tstamp, 4),
-            "state": state.dict(),
-            "ip": request.client.host,
-        }
-        fout.write(json.dumps(data) + "\n")
+    data = {
+        "tstamp": round(finish_tstamp, 4),
+        "type": "chat",
+        "model": model_name,
+        "comments": '',
+        "start": round(start_tstamp, 4),
+        "finish": round(start_tstamp, 4),
+        "state": state.dict(),
+        "ip": request.client.host,
+    }
+    json_dump(data, get_conv_log_filename(), mode='a')
 
 
 notice_markdown = ("""
-# 🏔️ Chat with Open Large Language Models
-- Vicuna: An Open-Source Chatbot Impressing GPT-4 with 90% ChatGPT Quality. [[Blog post]](https://vicuna.lmsys.org) [[GitHub]](https://github.com/lm-sys/FastChat)
-- Koala: A Dialogue Model for Academic Research. [[Blog post]](https://bair.berkeley.edu/blog/2023/04/03/koala/) [[GitHub]](https://github.com/young-geng/EasyLM)
-- This demo server. [[GitHub]](https://github.com/lm-sys/FastChat)
+# 👨‍⚕️🩺 Chat with Medical Large Language Model with Multilingual Supports.
+### Usage
+**You can ask questions about:**
+- **explanations of medical terms**
+- **differential diagnoses**
+- **medical advice**
+- **other questions you want to ask**
+**The response will be translated according to the language of your question.**
 
 ### Terms of use
 By using this service, users are required to agree to the following terms: The service is a research preview intended for non-commercial use only. It only provides limited safety measures and may generate offensive content. It must not be used for any illegal, harmful, violent, racist, or sexual purposes. The service may collect user dialogue data for future research.
-
-### Choose a model to chat with
-- [Vicuna](https://vicuna.lmsys.org): a chat assistant fine-tuned from LLaMA on user-shared conversations. This one is expected to perform best according to our evaluation.
-- [Koala](https://bair.berkeley.edu/blog/2023/04/03/koala/): a chatbot fine-tuned from LLaMA on user-shared conversations and open-source datasets. This one performs similarly to Vicuna.
-- [ChatGLM](https://chatglm.cn/blog): an open bilingual dialogue language model | 开源双语对话语言模型
-- [Alpaca](https://crfm.stanford.edu/2023/03/13/alpaca.html): a model fine-tuned from LLaMA on 52K instruction-following demonstrations.
-- [LLaMA](https://arxiv.org/abs/2302.13971): open and efficient foundation language models
-
-Note: If you are waiting in the queue, check out more benchmark results from GPT-4 on a static website [here](https://vicuna.lmsys.org/eval).
 """)
 
 
 learn_more_markdown = ("""
 ### License
-The service is a research preview intended for non-commercial use only, subject to the model [License](https://github.com/facebookresearch/llama/blob/main/MODEL_CARD.md) of LLaMA, [Terms of Use](https://openai.com/policies/terms-of-use) of the data generated by OpenAI, and [Privacy Practices](https://chrome.google.com/webstore/detail/sharegpt-share-your-chatg/daiacboceoaocpibfodeljbdfacokfjb) of ShareGPT. Please contact us if you find any potential violation.
+The service is a research preview intended for non-commercial use only, subject to the model [License](https://github.com/facebookresearch/llama/blob/main/MODEL_CARD.md) of LLaMA. Please contact us if you find any potential violation.
 """)
 
 
@@ -321,50 +335,54 @@ def build_demo():
                     placeholder="Enter text and press ENTER", visible=False).style(container=False)
             with gr.Column(scale=1, min_width=50):
                 submit_btn = gr.Button(value="Send", visible=False)
+        with gr.Row():
+            with gr.Column():
+                commentbox = gr.Textbox(show_label=False,
+                    placeholder="Enter comment and press Upvote, Downvote, or Flag", visible=False).style(container=False)
 
         with gr.Row(visible=False) as button_row:
             upvote_btn = gr.Button(value="👍  Upvote", interactive=False)
             downvote_btn = gr.Button(value="👎  Downvote", interactive=False)
             flag_btn = gr.Button(value="⚠️  Flag", interactive=False)
             #stop_btn = gr.Button(value="⏹️  Stop Generation", interactive=False)
-            regenerate_btn = gr.Button(value="🔄  Regenerate", interactive=False)
+            # regenerate_btn = gr.Button(value="🔄  Regenerate", interactive=False)
             clear_btn = gr.Button(value="🗑️  Clear history", interactive=False)
 
         with gr.Accordion("Parameters", open=False, visible=False) as parameter_row:
             temperature = gr.Slider(minimum=0.0, maximum=1.0, value=0.7, step=0.1, interactive=True, label="Temperature",)
             max_output_tokens = gr.Slider(minimum=0, maximum=1024, value=512, step=64, interactive=True, label="Max output tokens",)
 
-        gr.Markdown(learn_more_markdown)
+        # gr.Markdown(learn_more_markdown)
         url_params = gr.JSON(visible=False)
 
         # Register listeners
-        btn_list = [upvote_btn, downvote_btn, flag_btn, regenerate_btn, clear_btn]
+        btn_list = [upvote_btn, downvote_btn, flag_btn, clear_btn]
         upvote_btn.click(upvote_last_response,
-            [state, model_selector], [textbox, upvote_btn, downvote_btn, flag_btn])
+            [state, model_selector, commentbox], [textbox, commentbox, upvote_btn, downvote_btn, flag_btn])
         downvote_btn.click(downvote_last_response,
-            [state, model_selector], [textbox, upvote_btn, downvote_btn, flag_btn])
+            [state, model_selector, commentbox], [textbox, commentbox, upvote_btn, downvote_btn, flag_btn])
         flag_btn.click(flag_last_response,
-            [state, model_selector], [textbox, upvote_btn, downvote_btn, flag_btn])
-        regenerate_btn.click(regenerate, state,
-            [state, chatbot, textbox] + btn_list).then(
-            http_bot, [state, model_selector, temperature, max_output_tokens],
-            [state, chatbot] + btn_list)
+            [state, model_selector, commentbox], [textbox, commentbox, upvote_btn, downvote_btn, flag_btn])
+        # regenerate_btn.click(regenerate, state,
+        #     [state, chatbot, textbox] + btn_list).then(
+        #     http_bot, [state, model_selector, temperature, max_output_tokens],
+        #     [state, chatbot] + btn_list)
         clear_btn.click(clear_history, None, [state, chatbot, textbox] + btn_list)
 
         textbox.submit(add_text, [state, textbox], [state, chatbot, textbox] + btn_list
             ).then(http_bot, [state, model_selector, temperature, max_output_tokens],
-                   [state, chatbot] + btn_list)
+                   [state, chatbot, commentbox] + btn_list)
         submit_btn.click(add_text, [state, textbox], [state, chatbot, textbox] + btn_list
             ).then(http_bot, [state, model_selector, temperature, max_output_tokens],
-                   [state, chatbot] + btn_list)
+                   [state, chatbot, commentbox] + btn_list)
 
         if args.model_list_mode == "once":
             demo.load(load_demo, [url_params], [state, model_selector,
-                chatbot, textbox, submit_btn, button_row, parameter_row],
+                chatbot, textbox, commentbox, submit_btn, button_row, parameter_row],
                 _js=get_window_url_params)
         elif args.model_list_mode == "reload":
             demo.load(load_demo_refresh_model_list, None, [state, model_selector,
-                chatbot, textbox, submit_btn, button_row, parameter_row])
+                chatbot, textbox, commentbox, submit_btn, button_row, parameter_row])
         else:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
 

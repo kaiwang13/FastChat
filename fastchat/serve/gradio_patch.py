@@ -137,15 +137,18 @@ class Chatbot(Changeable, Selectable, IOComponent, JSONSerializable):
             assert isinstance(
                 message_pair, (tuple, list)
             ), f"Expected a list of lists or list of tuples. Received: {message_pair}"
-            assert (
-                len(message_pair) == 2
-            ), f"Expected a list of lists of length 2 or list of tuples of length 2. Received: {message_pair}"
+            # assert (
+            #     len(message_pair) == 2
+            # ), f"Expected a list of lists of length 2 or list of tuples of length 2. Received: {message_pair}"
+            q_display_msg = message_pair[0] if message_pair[1] is None else message_pair[1]
+            a_display_msg = message_pair[2] if message_pair[3] is None else message_pair[3]
+
             processed_messages.append(
                 (
                     #self._process_chat_messages(message_pair[0]),
                     '<pre style="font-family: var(--font)">' +
-                    message_pair[0] + "</pre>",
-                    self._process_chat_messages(message_pair[1]),
+                    q_display_msg + "</pre>",
+                    self._process_chat_messages(a_display_msg),
                 )
             )
         return processed_messages

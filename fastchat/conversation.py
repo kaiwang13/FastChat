@@ -17,6 +17,8 @@ class Conversation:
     messages: List[List[str]]
     offset: int
     sep_style: SeparatorStyle = SeparatorStyle.SINGLE
+    is_conv: bool = True
+    template: str = '{instruction}'
     sep: str = "###"
     sep2: str = None
 
@@ -24,40 +26,46 @@ class Conversation:
     conv_id: Any = None
 
     def get_prompt(self):
-        if self.sep_style == SeparatorStyle.SINGLE:
-            ret = self.system + self.sep
-            for role, message in self.messages:
-                if message:
-                    ret += role + ": " + message + self.sep
-                else:
-                    ret += role + ":"
-            return ret
-        elif self.sep_style == SeparatorStyle.TWO:
-            seps = [self.sep, self.sep2]
-            ret = self.system + seps[0]
-            for i, (role, message) in enumerate(self.messages):
-                if message:
-                    ret += role + ": " + message + seps[i % 2]
-                else:
-                    ret += role + ":"
-            return ret
+        if self.is_conv:
+            if self.sep_style == SeparatorStyle.SINGLE:
+                ret = self.system + self.sep
+                for role, message in self.messages:
+                    if message:
+                        ret += role + ": " + message + self.sep
+                    else:
+                        ret += role + ":"
+                return ret
+            elif self.sep_style == SeparatorStyle.TWO:
+                seps = [self.sep, self.sep2]
+                ret = self.system + seps[0]
+                for i, (role, message) in enumerate(self.messages):
+                    if message:
+                        ret += role + ": " + message + seps[i % 2]
+                    else:
+                        ret += role + ":"
+                return ret
+            else:
+                raise ValueError(f"Invalid style: {self.sep_style}")
         else:
-            raise ValueError(f"Invalid style: {self.sep_style}")
+            return self.template.format(instruction=self.messages[-2][1])
 
-    def append_message(self, role, message):
-        self.messages.append([role, message])
+    def append_message(self, role, message, raw_message, language='en'):
+        self.messages.append([role, message, raw_message, language])
 
     def to_gradio_chatbot(self):
         ret = []
-        for i, (role, msg) in enumerate(self.messages[self.offset:]):
+        for i, (role, msg, display_msg, language) in enumerate(self.messages[self.offset:]):
             if i % 2 == 0:
-                ret.append([msg, None])
+                ret.append([msg, display_msg, None, None])
             else:
-                ret[-1][-1] = msg
+                ret[-1][-2] = msg
+                ret[-1][-1] = display_msg
         return ret
 
     def copy(self):
         return Conversation(
+            is_conv=self.is_conv,
+            template=self.template,
             system=self.system,
             roles=self.roles,
             messages=[[x, y] for x, y in self.messages],
@@ -147,11 +155,25 @@ conv_bair_v1 = Conversation(
     sep2="</s>",
 )
 
+medgpt_temp = Conversation(
+    template="""Below is an instruction that describes a task. Write a response that appropriately completes the request.
+### Instruction:
+{instruction}
+### Response:""",
+    is_conv=False,
+    system="",
+    roles=("USER", "GPT"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.SINGLE,
+    sep="###"
+)
 
-default_conversation = conv_v1_2
+default_conversation = medgpt_temp
 conv_templates = {
     "v1": conv_v1_2,
     "bair_v1": conv_bair_v1,
+    "medgpt": medgpt_temp
 }
 
 
