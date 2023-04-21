@@ -146,7 +146,10 @@ def clear_history(request: gr.Request):
 
 
 def add_text(state, text, request: gr.Request):
-    language = detect_language(text)
+    if not args.no_trans:
+        language = detect_language(text)
+    else:
+        language = 'en'
     logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0:
         state.skip_next = True
