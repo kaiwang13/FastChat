@@ -318,7 +318,7 @@ pre {
 
 
 def build_demo():
-    with gr.Blocks(title="FastChat", theme=gr.themes.Base(), css=css) as demo:
+    with gr.Blocks(title="MedGPT", theme=gr.themes.Base(), css=css) as demo:
         state = gr.State()
 
         # Draw layout

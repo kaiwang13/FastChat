@@ -175,18 +175,18 @@ async def api_get_status(request: Request):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="localhost")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=21002)
     parser.add_argument("--worker-address", type=str,
         default="http://localhost:21002")
     parser.add_argument("--controller-address", type=str,
         default="http://localhost:21001")
-    parser.add_argument("--model-path", type=str, default="/data5/users/wkai/projects/MedLlama/EyeGPT/models/medgpt-65b-lora-ap-10")
+    parser.add_argument("--model-path", type=str, required=True)
     parser.add_argument("--model-name", type=str, default="medgpt")
     parser.add_argument("--device", type=str, choices=["cpu", "cuda", "mps"], default="cuda")
     parser.add_argument("--num-gpus", type=str, default='auto')
     parser.add_argument("--load-8bit", action="store_true")
-    parser.add_argument("--limit-model-concurrency", type=int, default=5)
+    parser.add_argument("--limit-model-concurrency", type=int, default=10)
     parser.add_argument("--stream-interval", type=int, default=2)
     parser.add_argument("--no-register", action="store_true")
     args = parser.parse_args()

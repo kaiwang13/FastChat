@@ -287,7 +287,7 @@ async def worker_api_get_status(request: Request):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="localhost")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=21001)
     parser.add_argument("--dispatch-method", type=str, choices=[
         "lottery", "shortest_queue"], default="shortest_queue")

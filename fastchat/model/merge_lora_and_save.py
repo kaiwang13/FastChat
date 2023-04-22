@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
 
-def merge_lora(base_model_path, target_model_path, lora_path):
+def merge_lora(base_model_path, lora_path, target_model_path):
     tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_path,
@@ -37,10 +37,10 @@ def merge_lora(base_model_path, target_model_path, lora_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-model-path", type=str, required=True)
-    parser.add_argument("--target-model-path", type=str, required=True)
+    parser.add_argument("--base-model-path", type=str, default='decapoda-research/llama-65b-hf')
     parser.add_argument("--lora-path", type=str, required=True)
+    parser.add_argument("--target-model-path", type=str, required=True)
 
     args = parser.parse_args()
 
-    merge_lora(args.base_model_path, args.target_model_path, args.lora_path)
+    merge_lora(args.base_model_path, args.lora_path, args.target_model_path)

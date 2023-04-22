@@ -29,7 +29,11 @@ class Conversation:
         if self.is_conv:
             if self.sep_style == SeparatorStyle.SINGLE:
                 ret = self.system + self.sep
-                for role, message in self.messages:
+                if len(self.messages) > 6:
+                    self.messages = self.messages[-6:]
+                for msg in self.messages:
+                    role = msg[0]
+                    message = msg[1]
                     if message:
                         ret += role + ": " + message + self.sep
                     else:
@@ -58,8 +62,8 @@ class Conversation:
             if i % 2 == 0:
                 ret.append([msg, display_msg, None, None])
             else:
-                ret[-1][-2] = msg
-                ret[-1][-1] = display_msg
+                ret[-1][2] = msg
+                ret[-1][3] = display_msg
         return ret
 
     def copy(self):
@@ -68,7 +72,7 @@ class Conversation:
             template=self.template,
             system=self.system,
             roles=self.roles,
-            messages=[[x, y] for x, y in self.messages],
+            messages=[[xi for xi in x] for x in self.messages],
             offset=self.offset,
             sep_style=self.sep_style,
             sep=self.sep,
@@ -169,11 +173,24 @@ medgpt_temp = Conversation(
     sep="###"
 )
 
+medgpt_conv = Conversation(
+    system="Below is an instruction that describes a task. "
+        "Write a response that appropriately completes the request.",
+        # "\n\n### Instruction:\n{instruction}\n\n### Response:",
+    is_conv=True,
+    roles=("Instruction", "Response"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.SINGLE,
+    sep="\n\n###"
+)
+
+
 default_conversation = medgpt_temp
 conv_templates = {
     "v1": conv_v1_2,
     "bair_v1": conv_bair_v1,
-    "medgpt": medgpt_temp
+    "medgpt": medgpt_conv
 }
 
 
