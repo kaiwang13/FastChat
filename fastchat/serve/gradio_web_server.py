@@ -147,7 +147,7 @@ def clear_history(request: gr.Request):
 
 def add_text(state, text, request: gr.Request):
     if not args.no_trans:
-        language = detect_language(text)
+        language = detect_language(text, args.trans_key)
     else:
         language = 'en'
     logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
@@ -161,7 +161,7 @@ def add_text(state, text, request: gr.Request):
             return (state, state.to_gradio_chatbot(), moderation_msg) + (
                 no_change_btn,) * 4
     if language != 'en':
-        trans_text = translate_to_en(text, language)
+        trans_text = translate_to_en(text, language, args.trans_key)
     else:
         trans_text = text
     text = text[:5000]  # Hard cut-off
@@ -266,7 +266,7 @@ def http_bot(state, model_selector, temperature, max_new_tokens, request: gr.Req
 
     state.messages[-1][1] = state.messages[-1][1][:-1]
     if state.messages[-1][3] != 'en':
-        state.messages[-1][2] = translate_from_en(state.messages[-1][1], state.messages[-1][3])
+        state.messages[-1][2] = translate_from_en(state.messages[-1][1], state.messages[-1][3], args.trans_key)
     yield (state, state.to_gradio_chatbot(), enable_tb) + (enable_btn,) * 4
 
     finish_tstamp = time.time()
@@ -398,10 +398,11 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int)
     parser.add_argument("--controller-url", type=str, default="http://localhost:21001")
     parser.add_argument("--concurrency-count", type=int, default=10)
-    parser.add_argument("--no_trans", action="store_false")
+    parser.add_argument("--no_trans", action="store_true")
     parser.add_argument("--model-list-mode", type=str, default="once",
         choices=["once", "reload"])
     parser.add_argument("--share", action="store_true")
+    parser.add_argument("--trans-key", required=True)
     parser.add_argument("--moderate", action="store_true",
         help="Enable content moderation")
     args = parser.parse_args()
