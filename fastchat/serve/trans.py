@@ -6,10 +6,10 @@ proxies = {
    'https': 'http://wkpc:1080',
 }
 
-def detect_language(content):
+def detect_language(content, key):
     url = "https://translation.googleapis.com/language/translate/v2/detect"
     data = {
-        'key':"AIzaSyDFkW4HYTd5cnt_Lh8GJrfrHm5tRhZdiyY",
+        'key': key,
         'q': content,
         'format': "text"
     }
@@ -18,10 +18,10 @@ def detect_language(content):
     result = res["data"]["detections"][0][0]["language"]
     return result
 
-def translate_to_en(content, language):
+def translate_to_en(content, language, key):
     url = "https://translation.googleapis.com/language/translate/v2"
     data = {
-        'key':"AIzaSyDFkW4HYTd5cnt_Lh8GJrfrHm5tRhZdiyY",
+        'key': key,
         'source': language,
         'target': 'en-us',
         'q': content,
@@ -32,10 +32,10 @@ def translate_to_en(content, language):
     result = res["data"]["translations"][0]["translatedText"]
     return result
 
-def translate_from_en(content, language):
+def translate_from_en(content, language, key):
     url = "https://translation.googleapis.com/language/translate/v2"
     data = {
-        'key':"AIzaSyDFkW4HYTd5cnt_Lh8GJrfrHm5tRhZdiyY",
+        'key': key,
         'source': 'en-us',
         'target': language,
         'q': content,
