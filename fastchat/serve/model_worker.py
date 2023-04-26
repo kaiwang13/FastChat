@@ -26,6 +26,8 @@ from fastchat.serve.inference import load_model, generate_stream, generate_strea
 from fastchat.serve.serve_chatglm import chatglm_generate_stream
 from fastchat.utils import (build_logger, server_error_msg,
     pretty_print_semaphore)
+from asyncer import asyncify
+
 
 GB = 1 << 30
 
@@ -193,7 +195,7 @@ async def api_generate(request: Request):
     if model_semaphore is None:
         model_semaphore = asyncio.Semaphore(args.limit_model_concurrency)
     await model_semaphore.acquire()
-    result = worker.generate_gate(params)
+    result = await asyncify(worker.generate_gate)(params)
     model_semaphore.release()
     return JSONResponse(result)
 

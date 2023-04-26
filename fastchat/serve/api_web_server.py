@@ -21,6 +21,7 @@ from fastchat.utils import build_logger, server_error_msg
 from fastchat.conversation import conv_templates
 from fastchat.serve.trans import detect_language, translate_to_en, translate_from_en
 from fastchat.serve.gradio_web_server import get_conv_log_filename, json_dump
+from asyncer import asyncify
 
 
 logger = build_logger("rest_web_server", "rest_web_server.log")
@@ -89,7 +90,7 @@ class RESTServer:
         }
         try:
             response = requests.post(args.controller_url + "/worker_generate",
-                json=params_call, timeout=120)
+                json=params_call, timeout=180)
             data = json.loads(response.content.decode())
             if data["error_code"] == 0:
                 output = data["text"][skip_echo_len:].strip()
@@ -212,7 +213,8 @@ async def worker_api_generate_stream(request: Request):
 @app.post("/generate")
 async def worker_api_generate(request: Request):
     params = await request.json()
-    return JSONResponse(server.generate(params, request.client.host))
+    result = await asyncify(server.generate)(params, request.client.host)
+    return JSONResponse(result)
 
 
 if __name__ == "__main__":

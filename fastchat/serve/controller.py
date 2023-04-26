@@ -20,6 +20,7 @@ import uvicorn
 
 from fastchat.constants import CONTROLLER_HEART_BEAT_EXPIRATION
 from fastchat.utils import build_logger, server_error_msg
+from asyncer import asyncify
 
 
 logger = build_logger("controller", "controller.log")
@@ -304,7 +305,8 @@ async def worker_api_generate_stream(request: Request):
 @app.post("/worker_generate")
 async def worker_api_generate(request: Request):
     params = await request.json()
-    return JSONResponse(controller.worker_api_generate(params))
+    result = await asyncify(controller.worker_api_generate)(params)
+    return JSONResponse(result)
 
 
 @app.post("/worker_get_status")
