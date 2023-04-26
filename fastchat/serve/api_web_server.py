@@ -98,6 +98,8 @@ class RESTServer:
                 conv.messages[-1][1] = output
                 if conv.messages[-1][3] != 'en':
                     conv.messages[-1][2] = translate_from_en(conv.messages[-1][1], conv.messages[-1][3], args.trans_key)
+                else:
+                    conv.messages[-1][2] = conv.messages[-1][1] 
             else:
                 output = data["text"] + f" (error_code: {data['error_code']})"
                 conv.messages[-1][1] = output
@@ -180,6 +182,8 @@ class RESTServer:
         conv.messages[-1][1] = conv.messages[-1][1][:-1]
         if conv.messages[-1][3] != 'en':
             conv.messages[-1][2] = translate_from_en(conv.messages[-1][1], conv.messages[-1][3], args.trans_key)
+        else:
+            conv.messages[-1][2] = conv.messages[-1][1] 
         params['conv'] = self.messages_to_conv(conv.messages)
         yield json.dumps(params).encode()
 
