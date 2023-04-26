@@ -16,7 +16,7 @@ dependencies = [
     "accelerate", "fastapi", "gradio==3.23", "markdown2[all]", "numpy",
     "requests", "sentencepiece", "tokenizers>=0.12.1",
     "torch", "uvicorn", "wandb", "prompt_toolkit>=3.0.0", "rich>=10.0.0",
-    "transformers @ git+https://github.com/huggingface/transformers.git"
+    "transformers @ git+https://github.com/huggingface/transformers.git@9eae4aa57650c1dbe1becd4e0979f6ad1e572ac0"
 ]
 
 [project.urls]
