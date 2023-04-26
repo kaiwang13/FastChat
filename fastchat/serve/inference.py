@@ -6,6 +6,7 @@ from fastchat.conversation import conv_templates, SeparatorStyle
 from fastchat.serve.compression import compress_module
 from fastchat.serve.monkey_patch_non_inplace import replace_llama_attn_with_non_inplace_operations
 from fastchat.serve.serve_chatglm import chatglm_generate_stream
+from transformers import GenerationConfig
 
 
 def load_model(model_name, device, num_gpus, load_8bit=False, debug=False):
@@ -111,6 +112,37 @@ def generate_stream_medgpt(model, tokenizer, params, device, context_len=2048, s
             break
 
     del past_key_values
+
+
+@torch.inference_mode()
+def generate_medgpt(model, tokenizer, params):
+    prompt = params["prompt"]
+    l_prompt = len(prompt)
+    temperature = float(params.get("temperature", 1.0))
+    max_new_tokens = int(params.get("max_new_tokens", 256))
+    stop_str = params.get("stop", None)
+
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+    generation_config = GenerationConfig(
+        temperature=temperature,
+        top_p=0.75,
+        top_k=40,
+        num_beams=4
+    )
+    with torch.no_grad():
+        generation_output = model.generate(
+            input_ids=input_ids.to(model.device),
+            generation_config=generation_config,
+            return_dict_in_generate=True,
+            output_scores=True,
+            max_new_tokens=max_new_tokens,
+        )
+    output = tokenizer.decode(generation_output.sequences[0], skip_special_tokens=True)
+    pos = output.rfind(stop_str, l_prompt)
+    if pos != -1:
+        output = output[:pos]
+    return output
 
 
 @torch.inference_mode()

@@ -13,7 +13,7 @@ from typing import List, Union
 import threading
 
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import numpy as np
 import requests
 import uvicorn
@@ -214,6 +214,27 @@ class Controller:
             }
             yield json.dumps(ret).encode() + b"\0"
 
+    def worker_api_generate(self, params):
+        worker_addr = self.get_worker_address(params["model"])
+        if not worker_addr:
+            logger.info(f"no worker: {params['model']}")
+            ret = {
+                "text": server_error_msg,
+                "error_code": 2,
+            }
+            return ret
+        try:
+            response = requests.post(worker_addr + "/worker_generate",
+                json=params, timeout=120)
+            return json.loads(response.content.decode('utf-8'))
+        except requests.exceptions.RequestException as e:
+            logger.info(f"worker timeout: {worker_addr}")
+            ret = {
+                "text": server_error_msg,
+                "error_code": 3,
+            }
+            return ret
+
 
     # Let the controller act as a worker to achieve hierarchical
     # management. This can be used to connect isolated sub networks.
@@ -278,6 +299,12 @@ async def worker_api_generate_stream(request: Request):
     params = await request.json()
     generator = controller.worker_api_generate_stream(params)
     return StreamingResponse(generator)
+
+
+@app.post("/worker_generate")
+async def worker_api_generate(request: Request):
+    params = await request.json()
+    return JSONResponse(controller.worker_api_generate(params))
 
 
 @app.post("/worker_get_status")
