@@ -226,7 +226,7 @@ class Controller:
             return ret
         try:
             response = requests.post(worker_addr + "/worker_generate",
-                json=params, timeout=120)
+                json=params, timeout=180)
             return json.loads(response.content.decode('utf-8'))
         except requests.exceptions.RequestException as e:
             logger.info(f"worker timeout: {worker_addr}")
