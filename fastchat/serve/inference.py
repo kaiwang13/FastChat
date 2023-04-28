@@ -6,7 +6,7 @@ from fastchat.conversation import conv_templates, SeparatorStyle
 from fastchat.serve.compression import compress_module
 from fastchat.serve.monkey_patch_non_inplace import replace_llama_attn_with_non_inplace_operations
 from fastchat.serve.serve_chatglm import chatglm_generate_stream
-from transformers import GenerationConfig
+from transformers import GenerationConfig, StoppingCriteria, StoppingCriteriaList
 
 
 def load_model(model_name, device, num_gpus, load_8bit=False, debug=False):
@@ -114,6 +114,17 @@ def generate_stream_medgpt(model, tokenizer, params, device, context_len=2048, s
     del past_key_values
 
 
+class KeywordsStoppingCriteria(StoppingCriteria):
+    def __init__(self, keyword, tokenizer, device):
+        self.keyword_ids = tokenizer(keyword, return_tensors="pt").input_ids.to(device)[0]
+        self.keyword_length = self.keyword_ids.shape[0]
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        if input_ids.shape[1] > self.keyword_length and torch.sum(input_ids[0][-self.keyword_length:] != self.keyword_ids) == 0:
+            return True
+        return False
+    
+
 @torch.inference_mode()
 def generate_medgpt(model, tokenizer, params):
     prompt = params["prompt"]
@@ -123,6 +134,7 @@ def generate_medgpt(model, tokenizer, params):
     stop_str = params.get("stop", None)
 
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    kwsc = KeywordsStoppingCriteria('\n\n###', tokenizer, model.device)
 
     generation_config = GenerationConfig(
         temperature=temperature,
@@ -137,6 +149,7 @@ def generate_medgpt(model, tokenizer, params):
             return_dict_in_generate=True,
             output_scores=True,
             max_new_tokens=max_new_tokens,
+            stopping_criteria=StoppingCriteriaList([kwsc]),
         )
     output = tokenizer.decode(generation_output.sequences[0], skip_special_tokens=True)
     pos = output.rfind(stop_str, l_prompt)
