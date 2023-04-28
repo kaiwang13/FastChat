@@ -90,7 +90,7 @@ class RESTServer:
         }
         try:
             response = requests.post(args.controller_url + "/worker_generate",
-                json=params_call, timeout=180)
+                json=params_call, timeout=190)
             data = json.loads(response.content.decode())
             if data["error_code"] == 0:
                 output = data["text"][skip_echo_len:].strip()
